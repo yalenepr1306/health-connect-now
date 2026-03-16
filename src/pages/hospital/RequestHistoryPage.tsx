@@ -73,27 +73,19 @@ export default function RequestHistoryPage() {
       const mapped: ResourceRequest[] = rows.map((row) => {
         const isOutgoing = row.from_hospital_id === user.id;
         const counterpartId = isOutgoing ? row.to_hospital_id : row.from_hospital_id;
+        const counterpartName = counterpartId ? (hospitalMap[counterpartId]?.name || "Unknown Hospital") : "Unknown Hospital";
 
         return {
           id: row.id,
           fromHospital: hospitalMap[row.from_hospital_id || ""]?.name || "Unknown Hospital",
-          toHospital: hospitalMap[row.to_hospital_id || ""]?.name || "Unknown Hospital",
+          toHospital: counterpartName,
           type: row.type,
           bloodGroup: row.blood_group || undefined,
           organType: row.organ_type || undefined,
           status: row.status,
           date: row.created_at ? new Date(row.created_at).toLocaleString() : "Unknown date",
-          fromHospitalLocation: undefined,
-          toDonor: undefined,
-          patientDetails: undefined,
-          unitsRequired: undefined,
-          organBloodType: undefined,
         };
-      }).map((row) => ({
-        ...row,
-        fromHospital: row.fromHospital,
-        toHospital: row.toHospital,
-      }));
+      });
 
       setRequests(mapped);
       setLoading(false);
