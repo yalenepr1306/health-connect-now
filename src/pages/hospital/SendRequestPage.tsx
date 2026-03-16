@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { BLOOD_GROUPS, ORGAN_TYPES } from "@/lib/mock-data";
 import { MapPin, Send } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+
+interface HospitalOption {
+  user_id: string;
+  name: string | null;
+  location: string | null;
+}
 
 export default function SendRequestPage() {
   const [type, setType] = useState<"blood" | "organ">("blood");
@@ -15,26 +23,85 @@ export default function SendRequestPage() {
   const [organBloodType, setOrganBloodType] = useState("");
   const [units, setUnits] = useState("");
   const [patientDetails, setPatientDetails] = useState("");
+  const [targetHospitalId, setTargetHospitalId] = useState("");
+  const [hospitals, setHospitals] = useState<HospitalOption[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
 
-  const handleSend = () => {
+  useEffect(() => {
+    const loadHospitals = async () => {
+      if (!user?.id) return;
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("user_id,name,location")
+        .not("license_number", "is", null)
+        .neq("user_id", user.id)
+        .order("name", { ascending: true });
+
+      if (error) {
+        toast({ title: "Could not load hospitals", description: error.message, variant: "destructive" });
+        return;
+      }
+
+      setHospitals((data as HospitalOption[] | null) ?? []);
+    };
+
+    loadHospitals();
+  }, [toast, user?.id]);
+
+  const handleSend = async () => {
+    if (!user?.id) return;
+
+    if (!targetHospitalId) {
+      toast({ title: "Error", description: "Please select a hospital", variant: "destructive" });
+      return;
+    }
+
     if (!resource) {
       toast({ title: "Error", description: "Please select a resource", variant: "destructive" });
       return;
     }
-    if (type === "blood" && !units) {
-      toast({ title: "Error", description: "Please enter units required", variant: "destructive" });
+
+    const parsedUnits = Number(units);
+    if (type === "blood" && (Number.isNaN(parsedUnits) || parsedUnits <= 0)) {
+      toast({ title: "Error", description: "Please enter valid units required", variant: "destructive" });
       return;
     }
+
     if (type === "organ" && !organBloodType) {
       toast({ title: "Error", description: "Please select blood type of organ", variant: "destructive" });
       return;
     }
-    toast({ title: "Request Sent!", description: "Your request has been submitted to nearby hospitals." });
+
+    setIsSubmitting(true);
+
+    const { error } = await supabase.from("resource_requests").insert({
+      from_hospital_id: user.id,
+      to_hospital_id: targetHospitalId,
+      type,
+      blood_group: type === "blood" ? resource : null,
+      organ_type: type === "organ" ? resource : null,
+      organ_blood_type: type === "organ" ? organBloodType : null,
+      units_required: type === "blood" ? parsedUnits : null,
+      patient_details: patientDetails.trim() ? patientDetails.trim() : null,
+      status: "pending",
+    });
+
+    if (error) {
+      toast({ title: "Request send failed", description: error.message, variant: "destructive" });
+      setIsSubmitting(false);
+      return;
+    }
+
+    toast({ title: "Request Sent!", description: "Your request has been submitted." });
     setResource("");
     setUnits("");
     setOrganBloodType("");
     setPatientDetails("");
+    setTargetHospitalId("");
+    setIsSubmitting(false);
   };
 
   return (
@@ -44,6 +111,23 @@ export default function SendRequestPage() {
         <Card className="md:col-span-2">
           <CardHeader><CardTitle className="flex items-center gap-2"><Send className="h-5 w-5" /> New Request</CardTitle></CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>Send To Hospital</Label>
+              <Select value={targetHospitalId} onValueChange={setTargetHospitalId}>
+                <SelectTrigger><SelectValue placeholder="Select hospital" /></SelectTrigger>
+                <SelectContent>
+                  {hospitals.map((hospital) => (
+                    <SelectItem key={hospital.user_id} value={hospital.user_id}>
+                      {hospital.name || "Unnamed Hospital"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {hospitals.length === 0 && (
+                <p className="text-xs text-muted-foreground">No other hospitals available.</p>
+              )}
+            </div>
+
             <div className="space-y-2">
               <Label>Request Type</Label>
               <Select value={type} onValueChange={(v) => { setType(v as "blood" | "organ"); setResource(""); setUnits(""); setOrganBloodType(""); }}>
@@ -94,8 +178,8 @@ export default function SendRequestPage() {
               />
             </div>
 
-            <Button onClick={handleSend} className="w-full">
-              <Send className="mr-2 h-4 w-4" /> Submit Request
+            <Button onClick={handleSend} className="w-full" disabled={isSubmitting || hospitals.length === 0}>
+              <Send className="mr-2 h-4 w-4" /> {isSubmitting ? "Submitting..." : "Submit Request"}
             </Button>
           </CardContent>
         </Card>
@@ -103,7 +187,18 @@ export default function SendRequestPage() {
         <Card>
           <CardHeader><CardTitle className="flex items-center gap-2"><MapPin className="h-5 w-5" /> Nearby Hospitals</CardTitle></CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">No nearby hospitals found. Connect your database to load hospital data.</p>
+            {hospitals.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No nearby hospitals found.</p>
+            ) : (
+              <div className="space-y-3">
+                {hospitals.map((hospital) => (
+                  <div key={hospital.user_id} className="rounded-md bg-secondary p-3">
+                    <p className="font-medium text-sm">{hospital.name || "Unnamed Hospital"}</p>
+                    <p className="text-xs text-muted-foreground">{hospital.location || "Location not available"}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
