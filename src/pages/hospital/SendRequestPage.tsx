@@ -23,7 +23,7 @@ export default function SendRequestPage() {
   const [organBloodType, setOrganBloodType] = useState("");
   const [units, setUnits] = useState("");
   const [patientDetails, setPatientDetails] = useState("");
-  const [targetHospitalId, setTargetHospitalId] = useState("");
+  
   const [hospitals, setHospitals] = useState<HospitalOption[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
