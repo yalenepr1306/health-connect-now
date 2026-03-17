@@ -13,7 +13,7 @@ interface DonorProfileRow {
   phone: string | null;
   location: string | null;
   available: boolean | null;
-  updated_at?: string | null;
+  created_at?: string | null;
 }
 
 export default function DonorProfile() {
