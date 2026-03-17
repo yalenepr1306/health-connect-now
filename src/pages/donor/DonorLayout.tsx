@@ -1,9 +1,9 @@
 import { Outlet, useNavigate } from "react-router-dom";
-import { User, AlertTriangle, History, ToggleRight, Bell, Heart } from "lucide-react";
+import { User, AlertTriangle, History, ToggleRight, Heart } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
-import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { LogoutConfirmDialog } from "@/components/LogoutConfirmDialog";
+import { NotificationDropdown } from "@/components/NotificationDropdown";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger, useSidebar,
@@ -78,10 +78,7 @@ export default function DonorLayout() {
               <h2 className="font-semibold text-sm hidden sm:block">Donor Dashboard</h2>
             </div>
             <div className="flex items-center gap-3">
-              <Button variant="ghost" size="icon" className="relative">
-                <Bell className="h-4 w-4" />
-                <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-accent text-accent-foreground text-[10px] flex items-center justify-center">2</span>
-              </Button>
+              <NotificationDropdown />
               <span className="text-sm text-muted-foreground hidden sm:block">{user?.name}</span>
             </div>
           </header>

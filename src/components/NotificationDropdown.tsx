@@ -25,8 +25,10 @@ export function NotificationDropdown() {
   const fetchNotifications = async () => {
     if (!user?.id) return;
 
-    // Fetch requests sent BY this hospital that have been accepted or rejected
-    const { data } = await supabase
+    const items: NotifItem[] = [];
+
+    // 1. For hospitals: requests they SENT that were accepted/rejected
+    const { data: sentData } = await supabase
       .from("resource_requests")
       .select("id, to_hospital_id, type, blood_group, organ_type, status, created_at")
       .eq("from_hospital_id", user.id)
@@ -34,42 +36,63 @@ export function NotificationDropdown() {
       .order("created_at", { ascending: false })
       .limit(20);
 
-    if (!data || data.length === 0) {
-      setNotifications([]);
-      return;
+    if (sentData && sentData.length > 0) {
+      const responderIds = [...new Set(sentData.map((r: any) => r.to_hospital_id).filter(Boolean))];
+      let nameMap: Record<string, string> = {};
+      if (responderIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("user_id, name")
+          .in("user_id", responderIds);
+        (profiles ?? []).forEach((p: any) => { nameMap[p.user_id] = p.name || "Unknown"; });
+      }
+
+      sentData.forEach((r: any) => {
+        const respName = nameMap[r.to_hospital_id] || "Someone";
+        const detail = r.type === "blood" ? (r.blood_group ? ` (${r.blood_group})` : "") : (r.organ_type ? ` (${r.organ_type})` : "");
+        const action = r.status === "accepted" ? "accepted" : "rejected";
+        items.push({
+          id: r.id,
+          message: `${respName} ${action} your ${r.type} request${detail}`,
+          type: r.status as "accepted" | "rejected",
+          date: r.created_at ? new Date(r.created_at).toLocaleString() : "",
+          read: readIds.has(r.id),
+          linkTo: "/hospital/request-history",
+        });
+      });
     }
 
-    // Get names of responding hospitals
-    const hospitalIds = [...new Set(data.map((r: any) => r.to_hospital_id).filter(Boolean))];
-    let nameMap: Record<string, string> = {};
-    if (hospitalIds.length > 0) {
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("user_id, name")
-        .in("user_id", hospitalIds);
-      (profiles ?? []).forEach((p: any) => { nameMap[p.user_id] = p.name || "Unknown"; });
+    // 2. For donors: incoming pending requests from hospitals
+    const { data: incomingData } = await supabase
+      .from("resource_requests")
+      .select("id, from_hospital_name, blood_group, status, created_at, patient_details")
+      .eq("to_hospital_id", user.id)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(20);
+
+    if (incomingData && incomingData.length > 0) {
+      incomingData
+        .filter((r: any) => r.patient_details?.startsWith("[DONOR_REQUEST]"))
+        .forEach((r: any) => {
+          items.push({
+            id: `donor-${r.id}`,
+            message: `${r.from_hospital_name || "A hospital"} needs your blood (${r.blood_group || "N/A"})`,
+            type: "incoming",
+            date: r.created_at ? new Date(r.created_at).toLocaleString() : "",
+            read: readIds.has(`donor-${r.id}`),
+            linkTo: "/donor/emergency",
+          });
+        });
     }
 
-    const items: NotifItem[] = data.map((r: any) => {
-      const hospName = nameMap[r.to_hospital_id] || "A hospital";
-      const detail = r.type === "blood" ? (r.blood_group ? ` (${r.blood_group})` : "") : (r.organ_type ? ` (${r.organ_type})` : "");
-      const action = r.status === "accepted" ? "accepted" : "rejected";
-      return {
-        id: r.id,
-        message: `${hospName} ${action} your ${r.type} request${detail}`,
-        type: r.status as "accepted" | "rejected",
-        date: r.created_at ? new Date(r.created_at).toLocaleString() : "",
-        read: readIds.has(r.id),
-        linkTo: "/hospital/request-history",
-      };
-    });
-
+    // Sort by date descending
+    items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     setNotifications(items);
   };
 
   useEffect(() => {
     fetchNotifications();
-    // Poll every 15 seconds for new notifications
     const interval = setInterval(fetchNotifications, 15000);
     return () => clearInterval(interval);
   }, [user?.id, readIds]);
