@@ -113,7 +113,7 @@ export default function SendRequestPage() {
     setUnits("");
     setOrganBloodType("");
     setPatientDetails("");
-    setTargetHospitalId("");
+    
     setIsSubmitting(false);
   };
 
