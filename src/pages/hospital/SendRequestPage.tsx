@@ -124,22 +124,6 @@ export default function SendRequestPage() {
         <Card className="md:col-span-2">
           <CardHeader><CardTitle className="flex items-center gap-2"><Send className="h-5 w-5" /> New Request</CardTitle></CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Send To Hospital</Label>
-              <Select value={targetHospitalId} onValueChange={setTargetHospitalId}>
-                <SelectTrigger><SelectValue placeholder="Select hospital" /></SelectTrigger>
-                <SelectContent>
-                  {hospitals.map((hospital) => (
-                    <SelectItem key={hospital.user_id} value={hospital.user_id}>
-                      {hospital.name || "Unnamed Hospital"}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {hospitals.length === 0 && (
-                <p className="text-xs text-muted-foreground">No other hospitals available.</p>
-              )}
-            </div>
 
             <div className="space-y-2">
               <Label>Request Type</Label>
