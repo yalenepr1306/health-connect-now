@@ -23,7 +23,7 @@ export default function SendRequestPage() {
   const [organBloodType, setOrganBloodType] = useState("");
   const [units, setUnits] = useState("");
   const [patientDetails, setPatientDetails] = useState("");
-  const [targetHospitalId, setTargetHospitalId] = useState("");
+  
   const [hospitals, setHospitals] = useState<HospitalOption[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
@@ -54,8 +54,8 @@ export default function SendRequestPage() {
   const handleSend = async () => {
     if (!user?.id) return;
 
-    if (!targetHospitalId) {
-      toast({ title: "Error", description: "Please select a hospital", variant: "destructive" });
+    if (hospitals.length === 0) {
+      toast({ title: "Error", description: "No other hospitals registered to send requests to.", variant: "destructive" });
       return;
     }
 
@@ -77,9 +77,20 @@ export default function SendRequestPage() {
 
     setIsSubmitting(true);
 
-    const { error } = await supabase.from("resource_requests").insert({
+    // Get the sender's profile info for denormalized columns
+    const { data: senderProfile } = await supabase
+      .from("profiles")
+      .select("name,location")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    // Build one row per target hospital (broadcast to all)
+    const targetIds = hospitals.map((h) => h.user_id);
+    const rows = targetIds.map((toId) => ({
       from_hospital_id: user.id,
-      to_hospital_id: targetHospitalId,
+      from_hospital_name: senderProfile?.name ?? null,
+      from_hospital_location: senderProfile?.location ?? null,
+      to_hospital_id: toId,
       type,
       blood_group: type === "blood" ? resource : null,
       organ_type: type === "organ" ? resource : null,
@@ -87,7 +98,9 @@ export default function SendRequestPage() {
       units_required: type === "blood" ? parsedUnits : null,
       patient_details: patientDetails.trim() ? patientDetails.trim() : null,
       status: "pending",
-    });
+    }));
+
+    const { error } = await supabase.from("resource_requests").insert(rows);
 
     if (error) {
       toast({ title: "Request send failed", description: error.message, variant: "destructive" });
@@ -95,12 +108,12 @@ export default function SendRequestPage() {
       return;
     }
 
-    toast({ title: "Request Sent!", description: "Your request has been submitted." });
+    toast({ title: "Request Sent!", description: `Your request has been sent to ${targetIds.length} hospital(s).` });
     setResource("");
     setUnits("");
     setOrganBloodType("");
     setPatientDetails("");
-    setTargetHospitalId("");
+    
     setIsSubmitting(false);
   };
 
@@ -111,22 +124,6 @@ export default function SendRequestPage() {
         <Card className="md:col-span-2">
           <CardHeader><CardTitle className="flex items-center gap-2"><Send className="h-5 w-5" /> New Request</CardTitle></CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Send To Hospital</Label>
-              <Select value={targetHospitalId} onValueChange={setTargetHospitalId}>
-                <SelectTrigger><SelectValue placeholder="Select hospital" /></SelectTrigger>
-                <SelectContent>
-                  {hospitals.map((hospital) => (
-                    <SelectItem key={hospital.user_id} value={hospital.user_id}>
-                      {hospital.name || "Unnamed Hospital"}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {hospitals.length === 0 && (
-                <p className="text-xs text-muted-foreground">No other hospitals available.</p>
-              )}
-            </div>
 
             <div className="space-y-2">
               <Label>Request Type</Label>

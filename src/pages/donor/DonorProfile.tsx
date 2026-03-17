@@ -13,7 +13,7 @@ interface DonorProfileRow {
   phone: string | null;
   location: string | null;
   available: boolean | null;
-  updated_at?: string | null;
+  created_at?: string | null;
 }
 
 export default function DonorProfile() {
@@ -31,7 +31,7 @@ export default function DonorProfile() {
 
       const { data, error } = await supabase
         .from("profiles")
-        .select("name,email,blood_group,phone,location,available,updated_at")
+        .select("name,email,blood_group,phone,location,available,created_at")
         .eq("user_id", user.id)
         .maybeSingle();
 
@@ -48,8 +48,21 @@ export default function DonorProfile() {
     loadProfile();
   }, [toast, user?.id]);
 
-  const formattedLastUpdate = profile?.updated_at
-    ? new Date(profile.updated_at).toLocaleDateString()
+  // Subscribe to profile changes (e.g. availability toggle from another page)
+  useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel("donor-profile-changes")
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles", filter: `user_id=eq.${user.id}` }, (payload) => {
+        const row = payload.new as DonorProfileRow;
+        setProfile(row);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id]);
+
+  const formattedLastUpdate = profile?.created_at
+    ? new Date(profile.created_at).toLocaleDateString()
     : "Not recorded";
 
   return (
