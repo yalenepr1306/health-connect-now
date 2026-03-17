@@ -31,7 +31,7 @@ export default function DonorProfile() {
 
       const { data, error } = await supabase
         .from("profiles")
-        .select("name,email,blood_group,phone,location,available,updated_at")
+        .select("name,email,blood_group,phone,location,available,created_at")
         .eq("user_id", user.id)
         .maybeSingle();
 
