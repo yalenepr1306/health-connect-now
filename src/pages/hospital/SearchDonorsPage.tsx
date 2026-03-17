@@ -3,10 +3,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { BLOOD_GROUPS } from "@/lib/mock-data";
 import { Donor } from "@/lib/types";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { Send } from "lucide-react";
 
 interface DonorProfileRow {
   user_id: string;
@@ -22,7 +25,9 @@ export default function SearchDonorsPage() {
   const [filter, setFilter] = useState("all");
   const [donors, setDonors] = useState<Donor[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sendingTo, setSendingTo] = useState<string | null>(null);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   useEffect(() => {
     const loadDonors = async () => {
@@ -61,6 +66,37 @@ export default function SearchDonorsPage() {
     [donors, filter]
   );
 
+  const handleSendRequest = async (donor: Donor) => {
+    if (!user?.id) return;
+    setSendingTo(donor.id);
+
+    // Get hospital name
+    const { data: senderProfile } = await supabase
+      .from("profiles")
+      .select("name,location")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    const { error } = await supabase.from("resource_requests").insert({
+      from_hospital_id: user.id,
+      from_hospital_name: senderProfile?.name ?? "Unknown Hospital",
+      from_hospital_location: senderProfile?.location ?? null,
+      to_hospital_id: donor.id,
+      type: "blood",
+      blood_group: donor.bloodGroup !== "N/A" ? donor.bloodGroup : null,
+      units_required: 1,
+      patient_details: `[DONOR_REQUEST] Request sent to donor ${donor.name}`,
+      status: "pending",
+    });
+
+    if (error) {
+      toast({ title: "Failed to send request", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Request Sent!", description: `Blood request sent to ${donor.name}.` });
+    }
+    setSendingTo(null);
+  };
+
   return (
     <div>
       <h1 className="text-2xl font-bold mb-6">Search Donors</h1>
@@ -94,6 +130,15 @@ export default function SearchDonorsPage() {
                   <p className="text-sm text-muted-foreground">Blood Group: {donor.bloodGroup}</p>
                   <p className="text-sm text-muted-foreground">Phone: {donor.phone}</p>
                   <p className="text-sm text-muted-foreground">Location: {donor.location}</p>
+                  <Button
+                    size="sm"
+                    className="w-full mt-2"
+                    disabled={sendingTo === donor.id}
+                    onClick={() => handleSendRequest(donor)}
+                  >
+                    <Send className="h-4 w-4 mr-2" />
+                    {sendingTo === donor.id ? "Sending..." : "Send Request"}
+                  </Button>
                 </CardContent>
               </Card>
             ))
