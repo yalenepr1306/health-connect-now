@@ -30,6 +30,7 @@ export default function SearchDonorsPage() {
         .from("profiles")
         .select("user_id,name,blood_group,phone,email,location,available")
         .not("blood_group", "is", null)
+        .eq("available", true)
         .order("name", { ascending: true });
 
       if (error) {

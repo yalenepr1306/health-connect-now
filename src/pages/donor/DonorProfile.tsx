@@ -48,8 +48,21 @@ export default function DonorProfile() {
     loadProfile();
   }, [toast, user?.id]);
 
-  const formattedLastUpdate = profile?.updated_at
-    ? new Date(profile.updated_at).toLocaleDateString()
+  // Subscribe to profile changes (e.g. availability toggle from another page)
+  useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel("donor-profile-changes")
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles", filter: `user_id=eq.${user.id}` }, (payload) => {
+        const row = payload.new as DonorProfileRow;
+        setProfile(row);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id]);
+
+  const formattedLastUpdate = profile?.created_at
+    ? new Date(profile.created_at).toLocaleDateString()
     : "Not recorded";
 
   return (
