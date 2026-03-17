@@ -54,8 +54,8 @@ export default function SendRequestPage() {
   const handleSend = async () => {
     if (!user?.id) return;
 
-    if (!targetHospitalId) {
-      toast({ title: "Error", description: "Please select a hospital", variant: "destructive" });
+    if (hospitals.length === 0) {
+      toast({ title: "Error", description: "No other hospitals registered to send requests to.", variant: "destructive" });
       return;
     }
 
