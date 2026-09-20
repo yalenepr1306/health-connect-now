@@ -1,6 +1,6 @@
 import { Outlet, useNavigate } from "react-router-dom";
 import {
-  LayoutDashboard, Droplets, Search, Send, Inbox, History, Heart, AlertTriangle, Building2,
+  LayoutDashboard, Droplets, Search, Send, Inbox, History, Heart, AlertTriangle, Building2, BedDouble, HeartPulse,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
@@ -14,6 +14,8 @@ import {
 const menuItems = [
   { title: "Dashboard", url: "/hospital", icon: LayoutDashboard },
   { title: "Update Blood Stock", url: "/hospital/blood-stock", icon: Droplets },
+  { title: "Update ICU Beds", url: "/hospital/icu-beds", icon: BedDouble },
+  { title: "Update Organs", url: "/hospital/organs", icon: HeartPulse },
   { title: "Emergency Request", url: "/hospital/emergency-request", icon: AlertTriangle },
   { title: "Search Donors", url: "/hospital/search-donors", icon: Search },
   { title: "Send Request", url: "/hospital/send-request", icon: Send },

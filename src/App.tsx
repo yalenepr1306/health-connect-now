@@ -20,6 +20,8 @@ import SearchDonorsPage from "./pages/hospital/SearchDonorsPage";
 import SendRequestPage from "./pages/hospital/SendRequestPage";
 import IncomingRequestsPage from "./pages/hospital/IncomingRequestsPage";
 import RequestHistoryPage from "./pages/hospital/RequestHistoryPage";
+import IcuBedsPage from "./pages/hospital/IcuBedsPage";
+import OrgansPage from "./pages/hospital/OrgansPage";
 
 import DonorLayout from "./pages/donor/DonorLayout";
 import DonorProfile from "./pages/donor/DonorProfile";
@@ -59,6 +61,8 @@ const App = () => (
               <Route path="send-request" element={<SendRequestPage />} />
               <Route path="incoming-requests" element={<IncomingRequestsPage />} />
               <Route path="request-history" element={<RequestHistoryPage />} />
+              <Route path="icu-beds" element={<IcuBedsPage />} />
+              <Route path="organs" element={<OrgansPage />} />
             </Route>
 
             <Route path="/donor" element={<ProtectedRoute role="donor"><DonorLayout /></ProtectedRoute>}>
