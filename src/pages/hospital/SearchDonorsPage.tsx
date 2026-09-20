@@ -6,20 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { BLOOD_GROUPS } from "@/lib/mock-data";
 import { Donor } from "@/lib/types";
-import { supabase } from "@/integrations/supabase/client";
+import * as profileService from "@/services/profileService";
+import * as requestService from "@/services/requestService";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { Send } from "lucide-react";
-
-interface DonorProfileRow {
-  user_id: string;
-  name: string | null;
-  blood_group: string | null;
-  phone: string | null;
-  email: string | null;
-  location: string | null;
-  available: boolean | null;
-}
 
 export default function SearchDonorsPage() {
   const [filter, setFilter] = useState("all");
@@ -31,20 +22,15 @@ export default function SearchDonorsPage() {
 
   useEffect(() => {
     const loadDonors = async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("user_id,name,blood_group,phone,email,location,available")
-        .not("blood_group", "is", null)
-        .eq("available", true)
-        .order("name", { ascending: true });
+      const { data, error } = await profileService.listAvailableDonors();
 
       if (error) {
-        toast({ title: "Unable to load donors", description: error.message, variant: "destructive" });
+        toast({ title: "Unable to load donors", description: error, variant: "destructive" });
         setLoading(false);
         return;
       }
 
-      const mapped = ((data as DonorProfileRow[] | null) ?? []).map((row) => ({
+      const mapped = (data ?? []).map((row) => ({
         id: row.user_id,
         name: row.name ?? "Unknown",
         bloodGroup: row.blood_group ?? "N/A",
@@ -71,26 +57,23 @@ export default function SearchDonorsPage() {
     setSendingTo(donor.id);
 
     // Get hospital name
-    const { data: senderProfile } = await supabase
-      .from("profiles")
-      .select("name,location")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    const { data: senderProfile } = await profileService.getProfile(user.id);
 
-    const { error } = await supabase.from("resource_requests").insert({
+    const { error } = await requestService.createRequests([{
       from_hospital_id: user.id,
       from_hospital_name: senderProfile?.name ?? "Unknown Hospital",
       from_hospital_location: senderProfile?.location ?? null,
       to_hospital_id: donor.id,
       type: "blood",
       blood_group: donor.bloodGroup !== "N/A" ? donor.bloodGroup : null,
+      organ_type: null,
+      organ_blood_type: null,
       units_required: 1,
       patient_details: `[DONOR_REQUEST] Request sent to donor ${donor.name}`,
-      status: "pending",
-    });
+    }]);
 
     if (error) {
-      toast({ title: "Failed to send request", description: error.message, variant: "destructive" });
+      toast({ title: "Failed to send request", description: error, variant: "destructive" });
     } else {
       toast({ title: "Request Sent!", description: `Blood request sent to ${donor.name}.` });
     }

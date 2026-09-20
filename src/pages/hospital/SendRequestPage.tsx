@@ -9,13 +9,9 @@ import { useToast } from "@/hooks/use-toast";
 import { BLOOD_GROUPS, ORGAN_TYPES } from "@/lib/mock-data";
 import { MapPin, Send } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
-
-interface HospitalOption {
-  user_id: string;
-  name: string | null;
-  location: string | null;
-}
+import * as profileService from "@/services/profileService";
+import * as requestService from "@/services/requestService";
+import type { HospitalOption } from "@/services/profileService";
 
 export default function SendRequestPage() {
   const [type, setType] = useState<"blood" | "organ">("blood");
@@ -23,7 +19,7 @@ export default function SendRequestPage() {
   const [organBloodType, setOrganBloodType] = useState("");
   const [units, setUnits] = useState("");
   const [patientDetails, setPatientDetails] = useState("");
-  
+
   const [hospitals, setHospitals] = useState<HospitalOption[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
@@ -33,19 +29,14 @@ export default function SendRequestPage() {
     const loadHospitals = async () => {
       if (!user?.id) return;
 
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("user_id,name,location")
-        .not("license_number", "is", null)
-        .neq("user_id", user.id)
-        .order("name", { ascending: true });
+      const { data, error } = await profileService.listOtherHospitals(user.id);
 
       if (error) {
-        toast({ title: "Could not load hospitals", description: error.message, variant: "destructive" });
+        toast({ title: "Could not load hospitals", description: error, variant: "destructive" });
         return;
       }
 
-      setHospitals((data as HospitalOption[] | null) ?? []);
+      setHospitals(data ?? []);
     };
 
     loadHospitals();
@@ -78,11 +69,7 @@ export default function SendRequestPage() {
     setIsSubmitting(true);
 
     // Get the sender's profile info for denormalized columns
-    const { data: senderProfile } = await supabase
-      .from("profiles")
-      .select("name,location")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    const { data: senderProfile } = await profileService.getProfile(user.id);
 
     // Build one row per target hospital (broadcast to all)
     const targetIds = hospitals.map((h) => h.user_id);
@@ -97,13 +84,12 @@ export default function SendRequestPage() {
       organ_blood_type: type === "organ" ? organBloodType : null,
       units_required: type === "blood" ? parsedUnits : null,
       patient_details: patientDetails.trim() ? patientDetails.trim() : null,
-      status: "pending",
     }));
 
-    const { error } = await supabase.from("resource_requests").insert(rows);
+    const { error } = await requestService.createRequests(rows);
 
     if (error) {
-      toast({ title: "Request send failed", description: error.message, variant: "destructive" });
+      toast({ title: "Request send failed", description: error, variant: "destructive" });
       setIsSubmitting(false);
       return;
     }

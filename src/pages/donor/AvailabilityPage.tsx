@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import * as profileService from "@/services/profileService";
 
 export default function AvailabilityPage() {
   const [available, setAvailable] = useState(false);
@@ -18,19 +18,15 @@ export default function AvailabilityPage() {
         return;
       }
 
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("available")
-        .eq("user_id", user.id)
-        .maybeSingle();
+      const { data, error } = await profileService.getAvailability(user.id);
 
       if (error) {
-        toast({ title: "Could not load status", description: error.message, variant: "destructive" });
+        toast({ title: "Could not load status", description: error, variant: "destructive" });
         setLoading(false);
         return;
       }
 
-      setAvailable(Boolean(data?.available));
+      setAvailable(Boolean(data));
       setLoading(false);
     };
 
@@ -43,14 +39,11 @@ export default function AvailabilityPage() {
     const previous = available;
     setAvailable(nextValue);
 
-    const { error } = await supabase
-      .from("profiles")
-      .update({ available: nextValue })
-      .eq("user_id", user.id);
+    const { error } = await profileService.updateAvailability(user.id, nextValue);
 
     if (error) {
       setAvailable(previous);
-      toast({ title: "Status update failed", description: error.message, variant: "destructive" });
+      toast({ title: "Status update failed", description: error, variant: "destructive" });
       return;
     }
 

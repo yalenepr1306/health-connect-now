@@ -4,24 +4,10 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ResourceRequest } from "@/lib/types";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import * as requestService from "@/services/requestService";
+import * as profileService from "@/services/profileService";
+import type { HospitalOption } from "@/services/profileService";
 import { useToast } from "@/hooks/use-toast";
-
-interface RequestRow {
-  id: string;
-  from_hospital_id: string | null;
-  to_hospital_id: string | null;
-  type: "blood" | "organ";
-  blood_group: string | null;
-  organ_type: string | null;
-  status: "pending" | "accepted" | "rejected";
-  created_at?: string | null;
-}
-
-interface HospitalProfileRow {
-  user_id: string;
-  name: string | null;
-}
 
 export default function RequestHistoryPage() {
   const [requests, setRequests] = useState<ResourceRequest[]>([]);
@@ -36,19 +22,15 @@ export default function RequestHistoryPage() {
         return;
       }
 
-      const { data, error } = await supabase
-        .from("resource_requests")
-        .select("*")
-        .or(`from_hospital_id.eq.${user.id},to_hospital_id.eq.${user.id}`)
-        .order("created_at", { ascending: false });
+      const { data, error } = await requestService.getHistoryFor(user.id);
 
       if (error) {
-        toast({ title: "Could not load request history", description: error.message, variant: "destructive" });
+        toast({ title: "Could not load request history", description: error, variant: "destructive" });
         setLoading(false);
         return;
       }
 
-      const rows = (data as RequestRow[] | null) ?? [];
+      const rows = data ?? [];
       const hospitalIds = Array.from(
         new Set(
           rows
@@ -57,14 +39,11 @@ export default function RequestHistoryPage() {
         )
       ) as string[];
 
-      let hospitalMap: Record<string, HospitalProfileRow> = {};
+      let hospitalMap: Record<string, HospitalOption> = {};
       if (hospitalIds.length > 0) {
-        const { data: profileRows } = await supabase
-          .from("profiles")
-          .select("user_id,name")
-          .in("user_id", hospitalIds);
+        const { data: profileRows } = await profileService.getProfilesByIds(hospitalIds);
 
-        hospitalMap = ((profileRows as HospitalProfileRow[] | null) ?? []).reduce<Record<string, HospitalProfileRow>>((acc, row) => {
+        hospitalMap = (profileRows ?? []).reduce<Record<string, HospitalOption>>((acc, row) => {
           acc[row.user_id] = row;
           return acc;
         }, {});

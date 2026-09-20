@@ -14,7 +14,8 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import * as profileService from "@/services/profileService";
+import * as requestService from "@/services/requestService";
 
 interface RequiredItem {
   id: number;
@@ -76,18 +77,10 @@ export default function HospitalEmergencyRequestPage() {
     setIsSubmitting(true);
 
     // Get sender profile
-    const { data: senderProfile } = await supabase
-      .from("profiles")
-      .select("name,location")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    const { data: senderProfile } = await profileService.getProfile(user.id);
 
     // Get all other hospitals
-    const { data: otherHospitals } = await supabase
-      .from("profiles")
-      .select("user_id")
-      .not("license_number", "is", null)
-      .neq("user_id", user.id);
+    const { data: otherHospitals } = await profileService.listOtherHospitals(user.id);
 
     const targetIds = (otherHospitals ?? []).map((h) => h.user_id);
 
@@ -113,13 +106,12 @@ export default function HospitalEmergencyRequestPage() {
       organ_blood_type: null,
       units_required: null,
       patient_details: fullDetails,
-      status: "pending" as const,
     }));
 
-    const { error } = await supabase.from("resource_requests").insert(rows);
+    const { error } = await requestService.createRequests(rows);
 
     if (error) {
-      toast({ title: "Failed to submit", description: error.message, variant: "destructive" });
+      toast({ title: "Failed to submit", description: error, variant: "destructive" });
       setIsSubmitting(false);
       return;
     }

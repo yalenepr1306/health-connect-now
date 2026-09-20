@@ -8,13 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { BLOOD_GROUPS } from "@/lib/mock-data";
 import { BloodStock } from "@/lib/types";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
-
-interface BloodStockRow {
-  id: string;
-  blood_group: string;
-  units: number | null;
-}
+import * as bloodStockService from "@/services/bloodStockService";
 
 export default function BloodStockPage() {
   const [stock, setStock] = useState<BloodStock[]>([]);
@@ -31,22 +25,18 @@ export default function BloodStockPage() {
       return;
     }
 
-    const { data, error } = await supabase
-      .from("blood_stock")
-      .select("id,blood_group,units")
-      .eq("hospital_id", user.id)
-      .order("blood_group", { ascending: true });
+    const { data, error } = await bloodStockService.getStockForHospital(user.id);
 
     if (error) {
-      toast({ title: "Could not load blood stock", description: error.message, variant: "destructive" });
+      toast({ title: "Could not load blood stock", description: error, variant: "destructive" });
       setLoading(false);
       return;
     }
 
-    const mapped = (data as BloodStockRow[] | null)?.map((row) => ({
+    const mapped = (data ?? []).map((row) => ({
       bloodGroup: row.blood_group,
       units: Number(row.units ?? 0),
-    })) || [];
+    }));
 
     setStock(mapped);
     setLoading(false);
@@ -67,33 +57,21 @@ export default function BloodStockPage() {
 
     setSaving(true);
 
-    const { data: existing, error: existingError } = await supabase
-      .from("blood_stock")
-      .select("id")
-      .eq("hospital_id", user.id)
-      .eq("blood_group", selectedGroup)
-      .limit(1)
-      .maybeSingle();
+    const { data: existing, error: existingError } = await bloodStockService.findStockRow(user.id, selectedGroup);
 
     if (existingError) {
       setSaving(false);
-      toast({ title: "Update failed", description: existingError.message, variant: "destructive" });
+      toast({ title: "Update failed", description: existingError, variant: "destructive" });
       return;
     }
 
-    const mutation = existing?.id
-      ? supabase.from("blood_stock").update({ units: parsedUnits }).eq("id", existing.id)
-      : supabase.from("blood_stock").insert({
-          hospital_id: user.id,
-          blood_group: selectedGroup,
-          units: parsedUnits,
-        });
-
-    const { error } = await mutation;
+    const { error } = existing?.id
+      ? await bloodStockService.updateStockUnits(existing.id, parsedUnits)
+      : await bloodStockService.insertStock(user.id, selectedGroup, parsedUnits);
 
     if (error) {
       setSaving(false);
-      toast({ title: "Update failed", description: error.message, variant: "destructive" });
+      toast({ title: "Update failed", description: error, variant: "destructive" });
       return;
     }
 

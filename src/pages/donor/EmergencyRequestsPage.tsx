@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import * as requestService from "@/services/requestService";
 import { AlertTriangle, MapPin } from "lucide-react";
 
 interface DonorRequest {
@@ -17,17 +17,6 @@ interface DonorRequest {
   status: string;
 }
 
-interface ResourceRequestRow {
-  id: string;
-  from_hospital_id: string | null;
-  from_hospital_name: string | null;
-  from_hospital_location: string | null;
-  blood_group: string | null;
-  status: string;
-  created_at: string | null;
-  patient_details: string | null;
-}
-
 export default function EmergencyRequestsPage() {
   const [requests, setRequests] = useState<DonorRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,21 +26,16 @@ export default function EmergencyRequestsPage() {
   const fetchRequests = useCallback(async () => {
     if (!user?.id) return;
 
-    const { data, error } = await supabase
-      .from("resource_requests")
-      .select("id, from_hospital_id, from_hospital_name, from_hospital_location, blood_group, status, created_at, patient_details")
-      .eq("to_hospital_id", user.id)
-      .eq("status", "pending")
-      .order("created_at", { ascending: false });
+    const { data, error } = await requestService.getPendingIncomingFor(user.id);
 
     if (error) {
-      toast({ title: "Error loading requests", description: error.message, variant: "destructive" });
+      toast({ title: "Error loading requests", description: error, variant: "destructive" });
       setLoading(false);
       return;
     }
 
     // Filter only donor requests (marked with [DONOR_REQUEST])
-    const donorRequests = ((data ?? []) as ResourceRequestRow[])
+    const donorRequests = (data ?? [])
       .filter((r) => r.patient_details?.startsWith("[DONOR_REQUEST]"))
       .map((r) => ({
         id: r.id,
@@ -75,13 +59,10 @@ export default function EmergencyRequestsPage() {
 
   const handleAction = async (id: string, action: "accept" | "decline") => {
     const newStatus = action === "accept" ? "accepted" : "rejected";
-    const { error } = await supabase
-      .from("resource_requests")
-      .update({ status: newStatus })
-      .eq("id", id);
+    const { error } = await requestService.updateStatus(id, newStatus);
 
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error", description: error, variant: "destructive" });
       return;
     }
 

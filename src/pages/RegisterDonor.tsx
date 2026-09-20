@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import * as authService from "@/services/authService";
+import * as profileService from "@/services/profileService";
 import { BLOOD_GROUPS } from "@/lib/mock-data";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
@@ -31,53 +32,44 @@ export default function RegisterDonor() {
     }
     setIsLoading(true);
     setRegistering(true);
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-      email: form.email,
-      password: form.password,
-    });
+    const { error: signUpError } = await authService.signUp(form.email, form.password);
 
-    if (signUpError || !signUpData.user) {
-      toast({ title: "Registration Failed", description: signUpError?.message ?? "Unknown error", variant: "destructive" });
+    if (signUpError) {
+      toast({ title: "Registration Failed", description: signUpError, variant: "destructive" });
       setIsLoading(false);
       return;
     }
 
-    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-      email: form.email,
-      password: form.password,
-    });
+    const { data: session, error: signInError } = await authService.signInWithPassword(form.email, form.password);
 
-    if (signInError || !signInData.session) {
-      toast({ title: "Auth Error", description: signInError?.message ?? "Could not authenticate after signup", variant: "destructive" });
+    if (signInError || !session) {
+      toast({ title: "Auth Error", description: signInError ?? "Could not authenticate after signup", variant: "destructive" });
       setIsLoading(false);
       return;
     }
 
-    const userId = signInData.user.id;
+    const userId = session.userId;
 
-    const { error: profileError } = await supabase.from("profiles").insert({
-      user_id: userId,
+    const { error: profileError } = await profileService.insertDonorProfile({
+      userId,
       name: form.name,
       email: form.email,
       phone: form.phone,
-      blood_group: form.bloodGroup,
+      bloodGroup: form.bloodGroup,
       location: form.location,
       available,
     });
 
     if (profileError) {
-      toast({ title: "Error saving profile", description: profileError.message, variant: "destructive" });
+      toast({ title: "Error saving profile", description: profileError, variant: "destructive" });
       setIsLoading(false);
       return;
     }
 
-    const { error: roleError } = await supabase.from("user_roles").insert({
-      user_id: userId,
-      role: "donor",
-    });
+    const { error: roleError } = await profileService.insertUserRole(userId, "donor");
 
     if (roleError) {
-      toast({ title: "Error saving role", description: roleError.message, variant: "destructive" });
+      toast({ title: "Error saving role", description: roleError, variant: "destructive" });
       setIsLoading(false);
       return;
     }

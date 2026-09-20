@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from "react";
-import { Session, User as SupabaseUser } from "@supabase/supabase-js";
-import { supabase } from "@/integrations/supabase/client";
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from "react";
 import { UserRole } from "@/lib/types";
+import * as authService from "@/services/authService";
+import type { AuthSession } from "@/services/authService";
+import * as profileService from "@/services/profileService";
 
 interface User {
   id: string;
@@ -12,7 +13,7 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  session: Session | null;
+  session: AuthSession | null;
   login: (email: string, password: string) => Promise<{ error: string | null }>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<{ error: string | null }>;
@@ -24,20 +25,20 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-async function fetchUserProfile(supabaseUser: SupabaseUser): Promise<{ user: User | null; error: string | null }> {
+async function loadUser(session: AuthSession): Promise<{ user: User | null; error: string | null }> {
   try {
     const [profileRes, roleRes] = await Promise.all([
-      supabase.from("profiles").select("*").eq("user_id", supabaseUser.id).maybeSingle(),
-      supabase.from("user_roles").select("role").eq("user_id", supabaseUser.id).maybeSingle(),
+      profileService.getProfile(session.userId),
+      profileService.getUserRole(session.userId),
     ]);
 
     if (profileRes.error) {
-      console.error("Profile fetch error:", profileRes.error.message);
-      return { user: null, error: `Profile lookup failed: ${profileRes.error.message}` };
+      console.error("Profile fetch error:", profileRes.error);
+      return { user: null, error: `Profile lookup failed: ${profileRes.error}` };
     }
     if (roleRes.error) {
-      console.error("Role fetch error:", roleRes.error.message);
-      return { user: null, error: `Role lookup failed: ${roleRes.error.message}` };
+      console.error("Role fetch error:", roleRes.error);
+      return { user: null, error: `Role lookup failed: ${roleRes.error}` };
     }
     if (!profileRes.data) {
       return { user: null, error: "Profile not found for this account." };
@@ -48,10 +49,10 @@ async function fetchUserProfile(supabaseUser: SupabaseUser): Promise<{ user: Use
 
     return {
       user: {
-        id: supabaseUser.id,
-        email: profileRes.data.email ?? supabaseUser.email ?? "",
-        name: profileRes.data.name ?? supabaseUser.user_metadata?.name ?? "User",
-        role: roleRes.data.role as UserRole,
+        id: session.userId,
+        email: profileRes.data.email ?? session.email ?? "",
+        name: profileRes.data.name ?? "User",
+        role: roleRes.data.role,
       },
       error: null,
     };
@@ -64,7 +65,7 @@ async function fetchUserProfile(supabaseUser: SupabaseUser): Promise<{ user: Use
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<AuthSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [profileError, setProfileError] = useState<string | null>(null);
   const registeringRef = useRef(false);
@@ -74,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const unsubscribe = authService.onAuthStateChange((newSession) => {
       setSession(newSession);
 
       // Skip profile fetch during registration — data isn't inserted yet
@@ -83,9 +84,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      if (newSession?.user) {
+      if (newSession) {
         setTimeout(async () => {
-          const { user: profile, error } = await fetchUserProfile(newSession.user);
+          const { user: profile, error } = await loadUser(newSession);
           setUser(profile);
           setProfileError(error);
           setLoading(false);
@@ -97,44 +98,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    supabase.auth.getSession().then(async ({ data: { session: currentSession } }) => {
+    authService.getCurrentSession().then(async (currentSession) => {
       setSession(currentSession);
-      if (currentSession?.user) {
-        const { user: profile, error } = await fetchUserProfile(currentSession.user);
+      if (currentSession) {
+        const { user: profile, error } = await loadUser(currentSession);
         setUser(profile);
         setProfileError(error);
       }
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return unsubscribe;
   }, []);
 
   const login = async (email: string, password: string): Promise<{ error: string | null }> => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) return { error: error.message };
+    const { data: newSession, error } = await authService.signInWithPassword(email, password);
+    if (error || !newSession) return { error };
 
-    if (data.user) {
-      const { user: profile, error: profileLookupError } = await fetchUserProfile(data.user);
-      setUser(profile);
-      setProfileError(profileLookupError);
-    }
+    const { user: profile, error: profileLookupError } = await loadUser(newSession);
+    setUser(profile);
+    setProfileError(profileLookupError);
 
     return { error: null };
   };
 
   const refreshProfile = async (): Promise<{ error: string | null }> => {
-    const { data: { session: currentSession } } = await supabase.auth.getSession();
-    if (!currentSession?.user) return { error: "No active session" };
+    const currentSession = await authService.getCurrentSession();
+    if (!currentSession) return { error: "No active session" };
 
-    const { user: profile, error } = await fetchUserProfile(currentSession.user);
+    const { user: profile, error } = await loadUser(currentSession);
     setUser(profile);
     setProfileError(error);
     return { error };
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    await authService.signOut();
     setUser(null);
     setSession(null);
     setProfileError(null);

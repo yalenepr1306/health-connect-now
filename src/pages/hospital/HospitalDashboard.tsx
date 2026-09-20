@@ -1,21 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { Droplets, Activity, Inbox, MapPin } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { BLOOD_GROUPS } from "@/lib/mock-data";
 import { useToast } from "@/hooks/use-toast";
+import * as bloodStockService from "@/services/bloodStockService";
+import * as requestService from "@/services/requestService";
+import * as profileService from "@/services/profileService";
 
 interface DashboardState {
   totalUnits: number;
   activeRequests: number;
   incomingRequests: number;
   nearbyHospitals: number;
-}
-
-interface BloodStockRow {
-  blood_group: string;
-  units: number | null;
 }
 
 const defaultState: DashboardState = {
@@ -40,32 +37,19 @@ export default function HospitalDashboard() {
       }
 
       const [bloodRes, outgoingRes, incomingRes, nearbyHospitalsRes] = await Promise.all([
-        supabase.from("blood_stock").select("blood_group,units").eq("hospital_id", user.id),
-        supabase
-          .from("resource_requests")
-          .select("id", { count: "exact", head: true })
-          .eq("from_hospital_id", user.id)
-          .eq("status", "pending"),
-        supabase
-          .from("resource_requests")
-          .select("id", { count: "exact", head: true })
-          .eq("to_hospital_id", user.id)
-          .eq("status", "pending"),
-        supabase
-          .from("profiles")
-          .select("user_id", { count: "exact", head: true })
-          .not("license_number", "is", null)
-          .neq("user_id", user.id),
+        bloodStockService.getStockForHospital(user.id),
+        requestService.countPendingOutgoing(user.id),
+        requestService.countPendingIncoming(user.id),
+        profileService.countOtherHospitals(user.id),
       ]);
 
       if (bloodRes.error) {
-        toast({ title: "Dashboard data unavailable", description: bloodRes.error.message, variant: "destructive" });
+        toast({ title: "Dashboard data unavailable", description: bloodRes.error, variant: "destructive" });
         setLoading(false);
         return;
       }
 
-      const stockRows = (bloodRes.data as BloodStockRow[] | null) ?? [];
-      const nextBloodMap = stockRows.reduce<Record<string, number>>((acc, row) => {
+      const nextBloodMap = (bloodRes.data ?? []).reduce<Record<string, number>>((acc, row) => {
         acc[row.blood_group] = Number(row.units ?? 0);
         return acc;
       }, {});
@@ -75,9 +59,9 @@ export default function HospitalDashboard() {
       setBloodMap(nextBloodMap);
       setState({
         totalUnits,
-        activeRequests: outgoingRes.count ?? 0,
-        incomingRequests: incomingRes.count ?? 0,
-        nearbyHospitals: nearbyHospitalsRes.count ?? 0,
+        activeRequests: outgoingRes.data ?? 0,
+        incomingRequests: incomingRes.data ?? 0,
+        nearbyHospitals: nearbyHospitalsRes.data ?? 0,
       });
       setLoading(false);
     };

@@ -2,24 +2,15 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { User, Phone, MapPin, Droplets, Calendar } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-
-interface DonorProfileRow {
-  name: string | null;
-  email: string | null;
-  blood_group: string | null;
-  phone: string | null;
-  location: string | null;
-  available: boolean | null;
-  created_at?: string | null;
-}
+import * as profileService from "@/services/profileService";
+import type { ProfileRecord } from "@/services/profileService";
 
 export default function DonorProfile() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [profile, setProfile] = useState<DonorProfileRow | null>(null);
+  const [profile, setProfile] = useState<ProfileRecord | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -29,14 +20,10 @@ export default function DonorProfile() {
         return;
       }
 
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("name,email,blood_group,phone,location,available,created_at")
-        .eq("user_id", user.id)
-        .maybeSingle();
+      const { data, error } = await profileService.getProfile(user.id);
 
       if (error) {
-        toast({ title: "Profile load failed", description: error.message, variant: "destructive" });
+        toast({ title: "Profile load failed", description: error, variant: "destructive" });
         setLoading(false);
         return;
       }
@@ -51,14 +38,7 @@ export default function DonorProfile() {
   // Subscribe to profile changes (e.g. availability toggle from another page)
   useEffect(() => {
     if (!user?.id) return;
-    const channel = supabase
-      .channel("donor-profile-changes")
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles", filter: `user_id=eq.${user.id}` }, (payload) => {
-        const row = payload.new as DonorProfileRow;
-        setProfile(row);
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return profileService.subscribeToProfile(user.id, setProfile);
   }, [user?.id]);
 
   const formattedLastUpdate = profile?.created_at

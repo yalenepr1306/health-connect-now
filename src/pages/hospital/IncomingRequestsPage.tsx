@@ -6,26 +6,9 @@ import { useToast } from "@/hooks/use-toast";
 import { ResourceRequest } from "@/lib/types";
 import { MapPin, CheckCircle, XCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
-
-interface RequestRow {
-  id: string;
-  from_hospital_id: string | null;
-  type: "blood" | "organ";
-  blood_group: string | null;
-  organ_type: string | null;
-  organ_blood_type: string | null;
-  units_required: number | null;
-  patient_details: string | null;
-  status: "pending" | "accepted" | "rejected";
-  created_at?: string | null;
-}
-
-interface HospitalProfileRow {
-  user_id: string;
-  name: string | null;
-  location: string | null;
-}
+import * as requestService from "@/services/requestService";
+import * as profileService from "@/services/profileService";
+import type { HospitalOption } from "@/services/profileService";
 
 export default function IncomingRequestsPage() {
   const [requests, setRequests] = useState<ResourceRequest[]>([]);
@@ -39,30 +22,22 @@ export default function IncomingRequestsPage() {
       return;
     }
 
-    const { data, error } = await supabase
-      .from("resource_requests")
-      .select("*")
-      .eq("to_hospital_id", user.id)
-      .eq("status", "pending")
-      .order("created_at", { ascending: false });
+    const { data, error } = await requestService.getPendingIncomingFor(user.id);
 
     if (error) {
-      toast({ title: "Could not load incoming requests", description: error.message, variant: "destructive" });
+      toast({ title: "Could not load incoming requests", description: error, variant: "destructive" });
       setLoading(false);
       return;
     }
 
-    const rows = (data as RequestRow[] | null) ?? [];
+    const rows = data ?? [];
     const requesterIds = Array.from(new Set(rows.map((row) => row.from_hospital_id).filter(Boolean))) as string[];
 
-    let requesterMap: Record<string, HospitalProfileRow> = {};
+    let requesterMap: Record<string, HospitalOption> = {};
     if (requesterIds.length > 0) {
-      const { data: hospitalsData } = await supabase
-        .from("profiles")
-        .select("user_id,name,location")
-        .in("user_id", requesterIds);
+      const { data: hospitalsData } = await profileService.getProfilesByIds(requesterIds);
 
-      requesterMap = ((hospitalsData as HospitalProfileRow[] | null) ?? []).reduce<Record<string, HospitalProfileRow>>((acc, hospital) => {
+      requesterMap = (hospitalsData ?? []).reduce<Record<string, HospitalOption>>((acc, hospital) => {
         acc[hospital.user_id] = hospital;
         return acc;
       }, {});
@@ -94,13 +69,10 @@ export default function IncomingRequestsPage() {
   }, [loadRequests]);
 
   const handleAction = async (id: string, action: "accepted" | "rejected") => {
-    const { error } = await supabase
-      .from("resource_requests")
-      .update({ status: action })
-      .eq("id", id);
+    const { error } = await requestService.updateStatus(id, action);
 
     if (error) {
-      toast({ title: "Action failed", description: error.message, variant: "destructive" });
+      toast({ title: "Action failed", description: error, variant: "destructive" });
       return;
     }
 

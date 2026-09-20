@@ -4,7 +4,8 @@ import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import * as requestService from "@/services/requestService";
+import * as profileService from "@/services/profileService";
 
 interface NotifItem {
   id: string;
@@ -13,30 +14,6 @@ interface NotifItem {
   date: string;
   read: boolean;
   linkTo: string;
-}
-
-interface SentRequestRow {
-  id: string;
-  to_hospital_id: string | null;
-  type: "blood" | "organ";
-  blood_group: string | null;
-  organ_type: string | null;
-  status: "accepted" | "rejected";
-  created_at: string | null;
-}
-
-interface ProfileRow {
-  user_id: string;
-  name: string | null;
-}
-
-interface IncomingRequestRow {
-  id: string;
-  from_hospital_name: string | null;
-  blood_group: string | null;
-  status: string;
-  created_at: string | null;
-  patient_details: string | null;
 }
 
 export function NotificationDropdown() {
@@ -52,27 +29,19 @@ export function NotificationDropdown() {
     const items: NotifItem[] = [];
 
     // 1. For hospitals: requests they SENT that were accepted/rejected
-    const { data: sentData } = await supabase
-      .from("resource_requests")
-      .select("id, to_hospital_id, type, blood_group, organ_type, status, created_at")
-      .eq("from_hospital_id", user.id)
-      .in("status", ["accepted", "rejected"])
-      .order("created_at", { ascending: false })
-      .limit(20);
+    const { data: sentRows } = await requestService.getSentDecidedFor(user.id, 20);
 
-    if (sentData && sentData.length > 0) {
-      const rows = sentData as SentRequestRow[];
-      const responderIds = [...new Set(rows.map((r) => r.to_hospital_id).filter(Boolean))] as string[];
+    if (sentRows && sentRows.length > 0) {
+      const responderIds = [...new Set(sentRows.map((r) => r.to_hospital_id).filter(Boolean))] as string[];
       const nameMap: Record<string, string> = {};
       if (responderIds.length > 0) {
-        const { data: profiles } = await supabase
-          .from("profiles")
-          .select("user_id, name")
-          .in("user_id", responderIds);
-        ((profiles ?? []) as ProfileRow[]).forEach((p) => { nameMap[p.user_id] = p.name || "Unknown"; });
+        const { data: profiles } = await profileService.getProfilesByIds(responderIds);
+        (profiles ?? []).forEach((p) => {
+          nameMap[p.user_id] = p.name || "Unknown";
+        });
       }
 
-      rows.forEach((r) => {
+      sentRows.forEach((r) => {
         const respName = (r.to_hospital_id && nameMap[r.to_hospital_id]) || "Someone";
         const detail = r.type === "blood" ? (r.blood_group ? ` (${r.blood_group})` : "") : (r.organ_type ? ` (${r.organ_type})` : "");
         const action = r.status === "accepted" ? "accepted" : "rejected";
@@ -88,16 +57,10 @@ export function NotificationDropdown() {
     }
 
     // 2. For donors: incoming pending requests from hospitals
-    const { data: incomingData } = await supabase
-      .from("resource_requests")
-      .select("id, from_hospital_name, blood_group, status, created_at, patient_details")
-      .eq("to_hospital_id", user.id)
-      .eq("status", "pending")
-      .order("created_at", { ascending: false })
-      .limit(20);
+    const { data: incomingRows } = await requestService.getPendingIncomingFor(user.id, 20);
 
-    if (incomingData && incomingData.length > 0) {
-      (incomingData as IncomingRequestRow[])
+    if (incomingRows && incomingRows.length > 0) {
+      incomingRows
         .filter((r) => r.patient_details?.startsWith("[DONOR_REQUEST]"))
         .forEach((r) => {
           items.push({
