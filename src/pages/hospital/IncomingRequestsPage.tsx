@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,7 +33,7 @@ export default function IncomingRequestsPage() {
   const { toast } = useToast();
   const { user } = useAuth();
 
-  const loadRequests = async () => {
+  const loadRequests = useCallback(async () => {
     if (!user?.id) {
       setLoading(false);
       return;
@@ -87,11 +87,11 @@ export default function IncomingRequestsPage() {
 
     setRequests(mapped);
     setLoading(false);
-  };
+  }, [user?.id, toast]);
 
   useEffect(() => {
     loadRequests();
-  }, [user?.id]);
+  }, [loadRequests]);
 
   const handleAction = async (id: string, action: "accepted" | "rejected") => {
     const { error } = await supabase

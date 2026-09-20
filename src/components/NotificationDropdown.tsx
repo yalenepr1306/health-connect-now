@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,30 @@ interface NotifItem {
   linkTo: string;
 }
 
+interface SentRequestRow {
+  id: string;
+  to_hospital_id: string | null;
+  type: "blood" | "organ";
+  blood_group: string | null;
+  organ_type: string | null;
+  status: "accepted" | "rejected";
+  created_at: string | null;
+}
+
+interface ProfileRow {
+  user_id: string;
+  name: string | null;
+}
+
+interface IncomingRequestRow {
+  id: string;
+  from_hospital_name: string | null;
+  blood_group: string | null;
+  status: string;
+  created_at: string | null;
+  patient_details: string | null;
+}
+
 export function NotificationDropdown() {
   const [notifications, setNotifications] = useState<NotifItem[]>([]);
   const [open, setOpen] = useState(false);
@@ -22,7 +46,7 @@ export function NotificationDropdown() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     if (!user?.id) return;
 
     const items: NotifItem[] = [];
@@ -37,18 +61,19 @@ export function NotificationDropdown() {
       .limit(20);
 
     if (sentData && sentData.length > 0) {
-      const responderIds = [...new Set(sentData.map((r: any) => r.to_hospital_id).filter(Boolean))];
-      let nameMap: Record<string, string> = {};
+      const rows = sentData as SentRequestRow[];
+      const responderIds = [...new Set(rows.map((r) => r.to_hospital_id).filter(Boolean))] as string[];
+      const nameMap: Record<string, string> = {};
       if (responderIds.length > 0) {
         const { data: profiles } = await supabase
           .from("profiles")
           .select("user_id, name")
           .in("user_id", responderIds);
-        (profiles ?? []).forEach((p: any) => { nameMap[p.user_id] = p.name || "Unknown"; });
+        ((profiles ?? []) as ProfileRow[]).forEach((p) => { nameMap[p.user_id] = p.name || "Unknown"; });
       }
 
-      sentData.forEach((r: any) => {
-        const respName = nameMap[r.to_hospital_id] || "Someone";
+      rows.forEach((r) => {
+        const respName = (r.to_hospital_id && nameMap[r.to_hospital_id]) || "Someone";
         const detail = r.type === "blood" ? (r.blood_group ? ` (${r.blood_group})` : "") : (r.organ_type ? ` (${r.organ_type})` : "");
         const action = r.status === "accepted" ? "accepted" : "rejected";
         items.push({
@@ -72,9 +97,9 @@ export function NotificationDropdown() {
       .limit(20);
 
     if (incomingData && incomingData.length > 0) {
-      incomingData
-        .filter((r: any) => r.patient_details?.startsWith("[DONOR_REQUEST]"))
-        .forEach((r: any) => {
+      (incomingData as IncomingRequestRow[])
+        .filter((r) => r.patient_details?.startsWith("[DONOR_REQUEST]"))
+        .forEach((r) => {
           items.push({
             id: `donor-${r.id}`,
             message: `${r.from_hospital_name || "A hospital"} needs your blood (${r.blood_group || "N/A"})`,
@@ -89,13 +114,13 @@ export function NotificationDropdown() {
     // Sort by date descending
     items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     setNotifications(items);
-  };
+  }, [user?.id, readIds]);
 
   useEffect(() => {
     fetchNotifications();
     const interval = setInterval(fetchNotifications, 15000);
     return () => clearInterval(interval);
-  }, [user?.id, readIds]);
+  }, [fetchNotifications]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 

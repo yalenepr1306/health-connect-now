@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,7 +25,7 @@ export default function BloodStockPage() {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const loadStock = async () => {
+  const loadStock = useCallback(async () => {
     if (!user?.id) {
       setLoading(false);
       return;
@@ -50,11 +50,11 @@ export default function BloodStockPage() {
 
     setStock(mapped);
     setLoading(false);
-  };
+  }, [user?.id, toast]);
 
   useEffect(() => {
     loadStock();
-  }, [user?.id]);
+  }, [loadStock]);
 
   const handleUpdate = async () => {
     if (!user?.id) return;

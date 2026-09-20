@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,13 +17,24 @@ interface DonorRequest {
   status: string;
 }
 
+interface ResourceRequestRow {
+  id: string;
+  from_hospital_id: string | null;
+  from_hospital_name: string | null;
+  from_hospital_location: string | null;
+  blood_group: string | null;
+  status: string;
+  created_at: string | null;
+  patient_details: string | null;
+}
+
 export default function EmergencyRequestsPage() {
   const [requests, setRequests] = useState<DonorRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
   const { user } = useAuth();
 
-  const fetchRequests = async () => {
+  const fetchRequests = useCallback(async () => {
     if (!user?.id) return;
 
     const { data, error } = await supabase
@@ -40,9 +51,9 @@ export default function EmergencyRequestsPage() {
     }
 
     // Filter only donor requests (marked with [DONOR_REQUEST])
-    const donorRequests = (data ?? [])
-      .filter((r: any) => r.patient_details?.startsWith("[DONOR_REQUEST]"))
-      .map((r: any) => ({
+    const donorRequests = ((data ?? []) as ResourceRequestRow[])
+      .filter((r) => r.patient_details?.startsWith("[DONOR_REQUEST]"))
+      .map((r) => ({
         id: r.id,
         hospitalName: r.from_hospital_name || "Unknown Hospital",
         hospitalLocation: r.from_hospital_location || "Unknown",
@@ -54,13 +65,13 @@ export default function EmergencyRequestsPage() {
 
     setRequests(donorRequests);
     setLoading(false);
-  };
+  }, [user?.id, toast]);
 
   useEffect(() => {
     fetchRequests();
     const interval = setInterval(fetchRequests, 10000);
     return () => clearInterval(interval);
-  }, [user?.id]);
+  }, [fetchRequests]);
 
   const handleAction = async (id: string, action: "accept" | "decline") => {
     const newStatus = action === "accept" ? "accepted" : "rejected";
@@ -82,7 +93,7 @@ export default function EmergencyRequestsPage() {
     }
   };
 
-  const urgencyColor = (u: string) => {
+  const urgencyColor = (u: string): "destructive" | "default" | "secondary" => {
     if (u === "critical") return "destructive";
     if (u === "high") return "default";
     return "secondary";
@@ -105,7 +116,7 @@ export default function EmergencyRequestsPage() {
                     <div className="flex items-center gap-2 mb-1">
                       <AlertTriangle className="h-4 w-4 text-muted-foreground" />
                       <h3 className="font-semibold">{r.hospitalName}</h3>
-                      <Badge variant={urgencyColor(r.urgency) as any}>{r.urgency}</Badge>
+                      <Badge variant={urgencyColor(r.urgency)}>{r.urgency}</Badge>
                     </div>
                     <p className="text-sm text-muted-foreground">Blood Group Needed: <strong>{r.bloodGroup}</strong></p>
                     <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
