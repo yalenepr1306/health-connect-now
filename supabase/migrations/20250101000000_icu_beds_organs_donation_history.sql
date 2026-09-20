@@ -1,10 +1,6 @@
 -- Adds backing tables for the ICU beds, organ availability, and donation
 -- history pages, which previously only held local component state.
---
--- Run this once against your Supabase project (SQL Editor, or
--- `supabase db push` if you use the CLI) before using those pages.
-
-create extension if not exists pgcrypto;
+-- Applied to the live project via the Supabase MCP connector.
 
 -- One row per hospital.
 create table if not exists public.icu_beds (
