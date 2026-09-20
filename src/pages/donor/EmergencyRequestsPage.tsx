@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import * as requestService from "@/services/requestService";
+import * as donationService from "@/services/donationService";
 import { AlertTriangle, MapPin } from "lucide-react";
 
 interface DonorRequest {
@@ -64,6 +65,16 @@ export default function EmergencyRequestsPage() {
     if (error) {
       toast({ title: "Error", description: error, variant: "destructive" });
       return;
+    }
+
+    if (action === "accept" && user?.id) {
+      const acceptedRequest = requests.find((r) => r.id === id);
+      await donationService.createRecord({
+        donorId: user.id,
+        hospitalName: acceptedRequest?.hospitalName ?? null,
+        bloodGroup: acceptedRequest?.bloodGroup ?? null,
+        resourceRequestId: id,
+      });
     }
 
     setRequests((prev) => prev.filter((r) => r.id !== id));

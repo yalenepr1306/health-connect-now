@@ -74,6 +74,7 @@ export interface EmergencyRequest {
 }
 
 export interface DonationRecord {
+  id: string;
   date: string;
   time: string;
   hospital: string;
